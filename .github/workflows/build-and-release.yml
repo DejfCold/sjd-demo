@@ -25,3 +25,53 @@ jobs:
 
       - name: Run tests
         run: mvn test
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '20'
+          distribution: 'temurin'
+
+      - name: Create Release
+        id: create_release
+        run: |
+          echo "Creating release..."
+          RELEASE_NAME="Release v${{ github.run_number }}"
+          RELEASE_BODY="Changes in this release:\n- Added feature X"
+          RESPONSE=$(curl \
+            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --request POST \
+            --data '{
+              "tag_name": "v'${{ github.run_number }}'",
+              "target_commitish": "${{ github.sha }}",
+              "name": "'"$RELEASE_NAME"'",
+              "body": "'"$RELEASE_BODY"'",
+              "draft": false,
+              "prerelease": false
+            }' \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "Release created with ID: $RELEASE_ID"
+
+      - name: Upload JAR file
+        id: upload_jar
+        run: |
+          echo "Uploading JAR file..."
+          RESPONSE=$(curl \
+            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Content-Type: application/java-archive" \
+            --request POST \
+            --data-binary "@./target/sjd-demo*.jar" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=sjd-demo.jar")
+          ASSET_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "JAR file uploaded with ID: $ASSET_ID"
